@@ -1,0 +1,86 @@
+﻿USE citations;
+
+
+# How much money is owed for the tickets at each location?
+CREATE OR REPLACE VIEW amount_due_per_violation_location AS
+SELECT violation_location AS "Violation Location", ROUND(SUM(amount_due), 2) AS "Total Amount Due"
+FROM locations l
+JOIN tickets_locations USING(location_id)
+JOIN tickets USING(ticket_id)
+WHERE amount_due > 0
+GROUP BY violation_location
+ORDER BY ROUND(SUM(amount_due), 2) DESC;
+
+SELECT * FROM amount_due_per_violation_location;
+
+
+# Which police unit has the highest number of tickets?
+CREATE OR REPLACE VIEW tickets_per_unit AS 
+SELECT unit AS `Unit`,
+unit_type AS `Unit Type`,
+officer AS `Officer`,
+COUNT(t.ticket_id) AS Tickets
+                FROM tickets t
+                JOIN tickets_units tu ON tu.ticket_id = t.ticket_id
+                JOIN units u ON u.unit_id = tu.unit_id
+                WHERE officer != "SPEED" and officer != "CNDT"
+                GROUP BY u.unit_id
+                ORDER BY Tickets DESC;
+        
+SELECT * FROM tickets_per_unit;
+
+
+# What traffic violation occurred the most?
+CREATE OR REPLACE VIEW occurrence_of_violations AS
+SELECT violation_type AS "Violation Type",
+COUNT(violation_id) AS "Occurrence"
+FROM violations v
+JOIN tickets_violations USING(violation_id)
+JOIN tickets USING(ticket_id)
+GROUP BY violation_type 
+ORDER BY COUNT(violation_id);
+
+SELECT * FROM occurrence_of_violations;
+
+
+# What percentage of tickets received hearings
+CREATE OR REPLACE VIEW percent_of_tickets_with_hearings AS 
+        SELECT
+                CONCAT(ROUND(
+                        (SELECT COUNT(h.hearing_id)
+                        FROM hearings h, tickets_hearings th, tickets t
+                        WHERE h.hearing_id = th.hearing_id
+                        AND th.ticket_id = t.ticket_id
+                        AND hearing_disposition IS NOT NULL)
+                /
+                        (SELECT COUNT(ticket_id) from tickets) * 100, 2), "%") AS "Percent of Tickets With Hearings", 
+                CONCAT(ROUND(
+                        (SELECT COUNT(h.hearing_id)
+                        FROM hearings h, tickets_hearings th, tickets t
+                        WHERE h.hearing_id = th.hearing_id
+                        AND th.ticket_id = t.ticket_id
+                        AND hearing_disposition = "Liable")
+                /
+                        (SELECT COUNT(ticket_id) from tickets) * 100, 2), "%") AS "Percent of Liable Tickets",
+                CONCAT(ROUND(
+                        (SELECT COUNT(h.hearing_id)
+                        FROM hearings h, tickets_hearings th, tickets t
+                        WHERE h.hearing_id = th.hearing_id
+                        AND th.ticket_id = t.ticket_id
+                        AND hearing_disposition = "Not Liable")
+                /
+                        (SELECT COUNT(ticket_id) from tickets) * 100, 2), "%") AS "Percent of Not Liable Tickets";
+
+SELECT * FROM percent_of_tickets_with_hearings;
+
+
+# What combination of vehicle make, license plate type, and zip code got the most tickets? 
+CREATE OR REPLACE VIEW number_of_tickets_per_specific_vehicle_type AS
+SELECT vehicle_make, license_plate_type, driver_zip_code, COUNT(t.ticket_id) AS "Number of Tickets"
+                FROM vehicles v, tickets_vehicles tv, tickets t
+                WHERE v.vehicle_id = tv.vehicle_id
+                AND tv.ticket_id = t.ticket_id
+GROUP BY vehicle_make, license_plate_type, driver_zip_code
+ORDER BY COUNT(t.ticket_id) DESC;
+
+SELECT * FROM number_of_tickets_per_specific_vehicle_type;
